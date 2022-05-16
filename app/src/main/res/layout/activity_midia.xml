@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MidiaActivity">
+    tools:context=".MediaActivity">
 
     <Button
         android:id="@+id/play"
@@ -12,7 +12,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="33dp"
         android:layout_marginTop="37dp"
-        android:text="Play"
+        android:text="@string/play"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
@@ -22,7 +22,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="33dp"
         android:layout_marginTop="33dp"
-        android:text="Pause"
+        android:text="@string/pause"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/play" />
 
@@ -30,7 +30,9 @@
         android:id="@+id/stop"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Stop"
-        tools:layout_editor_absoluteX="33dp"
-        tools:layout_editor_absoluteY="206dp" />
+        android:layout_marginStart="33dp"
+        android:layout_marginTop="40dp"
+        android:text="@string/stop"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/pause" />
 </androidx.constraintlayout.widget.ConstraintLayout>
