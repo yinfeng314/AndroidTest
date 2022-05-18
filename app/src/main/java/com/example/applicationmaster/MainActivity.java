@@ -33,6 +33,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 
+// 主体部分
 public class MainActivity extends AppCompatActivity {
 
     public static final int TAKE_PHOTO = 1;
