@@ -14,7 +14,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
-import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
@@ -24,23 +23,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.CameraSelector;
-import androidx.camera.core.ImageCapture;
-import androidx.camera.core.ImageCaptureException;
-import androidx.camera.core.Preview;
-import androidx.camera.lifecycle.ProcessCameraProvider;
-import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 
-import com.google.common.util.concurrent.ListenableFuture;
-
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Locale;
-import java.util.concurrent.ExecutorService;
 
 // 主体部分
 public class MainActivity extends AppCompatActivity {
@@ -83,7 +72,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // 转移按钮的点击事件
+        // 音频转移按钮的点击事件
         trans.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -92,6 +81,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        // 摄像转移按钮的点击事件
         start.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -101,8 +91,6 @@ public class MainActivity extends AppCompatActivity {
         });
 
     }
-
-
 
     // 拍照按钮封装
     private void photo(){

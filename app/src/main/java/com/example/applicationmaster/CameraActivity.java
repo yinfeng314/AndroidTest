@@ -1,142 +1,168 @@
 package com.example.applicationmaster;
 
-import androidx.appcompat.app.AppCompatActivity;
-
-import android.os.Bundle;
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.ContentValues;
 import android.content.pm.PackageManager;
-import android.graphics.Camera;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
-import androidx.camera.core.ViewPort;
 import androidx.camera.lifecycle.ProcessCameraProvider;
-import androidx.camera.view.PreviewView;
+import androidx.camera.video.MediaStoreOutputOptions;
+import androidx.camera.video.Quality;
+import androidx.camera.video.QualitySelector;
+import androidx.camera.video.Recorder;
+import androidx.camera.video.Recording;
+import androidx.camera.video.VideoCapture;
+import androidx.camera.video.VideoRecordEvent;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.example.applicationmaster.databinding.ActivityCameraBinding;
+import com.example.applicationmaster.databinding.ActivityMainBinding;
 import com.google.common.util.concurrent.ListenableFuture;
 
-//import org.jetbrains.annotations.NotNull;
-
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.nio.Buffer;
-import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-
 public class CameraActivity extends AppCompatActivity {
 
-    private ImageCapture imageCapture;
-    private File outputDirectory;
-    private ExecutorService cameraExecutor;
-    private ProcessCameraProvider processCameraProvider;
-    private Preview preview;
-    private CameraSelector cameraSelector;
+    private @NonNull ActivityCameraBinding viewBinding;
 
-    private CameraSelector cameraSelectorId = CameraSelector.DEFAULT_BACK_CAMERA;
-    private static final int CAMERA_PERMISSION_REQUEST_CODE = 1;
+    private ImageCapture imageCapture = null;
+
+    private VideoCapture<Recorder> videoCapture = null;
+    private Recording recording = null;
+
+    private ExecutorService cameraExecutor;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_camera);
-        // 请求权限
+        viewBinding = ActivityCameraBinding.inflate(getLayoutInflater());
+        setContentView(viewBinding.getRoot());
+        Button imageButton = (Button) findViewById(R.id.image_capture_button);
+        Button cameraButton = (Button) findViewById(R.id.camera_capture_button);
+        // 请求相机权限
         if (allPermissionsGranted()) {
             startCamera();
         } else {
-            ActivityCompat.requestPermissions(
-                    this, Configuration.REQUIRED_PERMISSIONS, Configuration.REQUEST_CODE_PERMISSIONS);
+            ActivityCompat.requestPermissions(this, Configuration.REQUIRED_PERMISSIONS,
+                    Configuration.REQUEST_CODE_PERMISSIONS);
         }
 
         // 设置拍照按钮监听
-        Button button = (Button) findViewById(R.id.camera_capture_button);
-        button.setOnClickListener(view -> takePhoto());
-        PreviewView previewView = findViewById(R.id.viewFinder);
+        viewBinding.imageCaptureButton.setOnClickListener(v -> takePhoto());
+        viewBinding.videoCaptureButton.setOnClickListener(v -> captureVideo());
 
-        // 设置保存位置
-        outputDirectory = getOutputDirectory();
         cameraExecutor = Executors.newSingleThreadExecutor();
+
     }
 
-    private void startCamera() {
-        // 创建拍照所需的实例
-        imageCapture = new ImageCapture.Builder().build();
-        processCameraProvider.bindToLifecycle(CameraActivity.this,
-                cameraSelector,
-                preview,
-                imageCapture);
-        // 将Camera的生命周期和Activity绑定在一起（设定生命周期所有者），这样就不用手动控制相机的启动和关闭。
-        ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(this);
+    @SuppressLint("CheckResult")
+    private void captureVideo() {
+        // 确保videoCapture 已经被实例化，否则程序可能崩溃
+        if (videoCapture != null) {
+            viewBinding.videoCaptureButton.setEnabled(false);
 
-        cameraProviderFuture.addListener(() -> {
-            try {
-                // 将你的相机和当前生命周期的所有者绑定所需的对象
-                ProcessCameraProvider processCameraProvider = cameraProviderFuture.get();
-
-                // 创建一个Preview 实例，并设置该实例的 surface 提供者（provider）。
-                PreviewView viewFinder = (PreviewView) findViewById(R.id.viewFinder);
-                Preview preview = new Preview.Builder()
-                        .build();
-                preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
-
-                // 选择后置摄像头作为默认摄像头
-                CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
-
-                // 重新绑定用例前先解绑
-                processCameraProvider.unbindAll();
-
-                // 绑定用例至相机
-                processCameraProvider.bindToLifecycle(CameraActivity.this, cameraSelector, preview);
-
-            } catch (Exception e) {
-                Log.e(Configuration.TAG, "用例绑定失败！" + e);
+            Recording curRecording = recording;
+            if (curRecording != null) {
+                // 停止当前的 recording session（录制会话）
+                curRecording.stop();
+                recording = null;
+                return;
             }
-        }, ContextCompat.getMainExecutor(this));
 
+            // 创建一个新的 recording session
+            String name = new SimpleDateFormat(Configuration.FILENAME_FORMAT, Locale.SIMPLIFIED_CHINESE)
+                    .format(System.currentTimeMillis());
+            ContentValues contentValues = new ContentValues();
+            contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+            contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
+            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                contentValues.put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/CameraX-Video");
+            }
+
+            MediaStoreOutputOptions mediaStoreOutputOptions = new MediaStoreOutputOptions
+                    .Builder(getContentResolver(), MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+                    .setContentValues(contentValues)
+                    .build();
+            // 申请音频权限
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.RECORD_AUDIO},
+                        Configuration.REQUEST_CODE_PERMISSIONS);
+            }
+            recording = videoCapture.getOutput().prepareRecording(this, mediaStoreOutputOptions)
+                    .withAudioEnabled() // 开启音频录制
+                    .start(ContextCompat.getMainExecutor(this), videoRecordEvent -> {
+                        if (videoRecordEvent instanceof VideoRecordEvent.Start) {
+                            viewBinding.videoCaptureButton.setText(getString(R.string.stop_capture));
+                            viewBinding.videoCaptureButton.setEnabled(true);
+                        } else if (videoRecordEvent instanceof VideoRecordEvent.Finalize) {
+                            if (!((VideoRecordEvent.Finalize) videoRecordEvent).hasError()) {
+                                String msg = "Video capture succeeded: " +
+                                        ((VideoRecordEvent.Finalize) videoRecordEvent).getOutputResults()
+                                                .getOutputUri();
+                                Toast.makeText(getBaseContext(), msg, Toast.LENGTH_SHORT).show();
+                                Log.d(Configuration.TAG, msg);
+                            } else {
+                                if (recording != null) {
+                                    recording.close();
+                                    recording = null;
+                                    Log.e(Configuration.TAG, "Video capture end with error: " +
+                                            ((VideoRecordEvent.Finalize) videoRecordEvent).getError());
+                                }
+                            }
+                            viewBinding.videoCaptureButton.setText(getString(R.string.start_capture));
+                            viewBinding.videoCaptureButton.setEnabled(true);
+                        }
+                    });
+        }
     }
 
     private void takePhoto() {
         // 确保imageCapture 已经被实例化, 否则程序将可能崩溃
         if (imageCapture != null) {
             // 创建带时间戳的输出文件以保存图片，带时间戳是为了保证文件名唯一
-            File photoFile = new File(outputDirectory,
-                    new SimpleDateFormat(Configuration.FILENAME_FORMAT,
-                            Locale.SIMPLIFIED_CHINESE).format(System.currentTimeMillis())
-                            + ".jpg");
+            String name = new SimpleDateFormat(Configuration.FILENAME_FORMAT,
+                    Locale.SIMPLIFIED_CHINESE).format(System.currentTimeMillis());
+            ContentValues contentValues = new ContentValues();
+            contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+            contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
+            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                contentValues.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/CameraX-Image");
+            }
 
-            // 创建 output option 对象，用以指定照片的输出方式
+            // 创建 output option 对象，用以指定照片的输出方式。
+            // 在这个对象中指定有关我们希望输出如何的方式。我们希望将输出保存在 MediaStore 中，以便其他应用可以显示它
             ImageCapture.OutputFileOptions outputFileOptions = new ImageCapture.OutputFileOptions
-                    .Builder(photoFile)
+                    .Builder(getContentResolver(),
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    contentValues)
                     .build();
 
-            // 执行takePicture（拍照）方法
+            // 设置拍照监听，用以在照片拍摄后执行takePicture（拍照）方法
             imageCapture.takePicture(outputFileOptions,
                     ContextCompat.getMainExecutor(this),
                     new ImageCapture.OnImageSavedCallback() {// 保存照片时的回调
                         @Override
                         public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
-                            Uri savedUri = Uri.fromFile(photoFile);
-                            String msg = "照片捕获成功! " + savedUri;
+                            String msg = "照片捕获成功! " + outputFileResults.getSavedUri();
                             Toast.makeText(getBaseContext(), msg, Toast.LENGTH_SHORT).show();
                             Log.d(Configuration.TAG, msg);
                         }
@@ -149,7 +175,59 @@ public class CameraActivity extends AppCompatActivity {
         }
     }
 
-    // 权限确定
+    private void startCamera() {
+        // 将Camera的生命周期和Activity绑定在一起（设定生命周期所有者），这样就不用手动控制相机的启动和关闭。
+        ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(this);
+
+        cameraProviderFuture.addListener(() -> {
+            try {
+                // 将你的相机和当前生命周期的所有者绑定所需的对象
+                ProcessCameraProvider processCameraProvider = cameraProviderFuture.get();
+
+                // 创建一个Preview 实例，并设置该实例的 surface 提供者（provider）。
+                Preview preview = new Preview.Builder()
+                        .build();
+                preview.setSurfaceProvider(viewBinding.viewFinder.getSurfaceProvider());
+
+                // 创建录像所需实例
+                Recorder recorder = new Recorder.Builder()
+                        .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
+                        .build();
+                videoCapture = VideoCapture.withOutput(recorder);
+
+                // 选择后置摄像头作为默认摄像头
+                CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
+
+                // 创建拍照所需的实例
+                imageCapture = new ImageCapture.Builder().build();
+
+                // 设置预览帧分析
+                ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
+                        .build();
+                imageAnalysis.setAnalyzer(cameraExecutor, new MyAnalyzer());
+
+                // 重新绑定用例前先解绑
+                processCameraProvider.unbindAll();
+
+                // 绑定用例至相机
+                /*此步骤具有 Camera2 设备文档中指定的设备级别要求:
+                    预览 + 视频捕获 + 图像捕获：LIMITED设备及以上。
+                    预览 + 视频捕获 + 图像分析：LEVEL_3（最高）设备添加到 Android 7（N）。
+                    预览 + 视频捕获 + 图像分析 + 图像捕获：不支持。
+                */
+                processCameraProvider.bindToLifecycle(CameraActivity.this, cameraSelector,
+                        preview,
+                        imageCapture/*,
+                        imageAnalysis*/,
+                        videoCapture);
+
+            } catch (Exception e) {
+                Log.e(Configuration.TAG, "用例绑定失败！" + e);
+            }
+        }, ContextCompat.getMainExecutor(this));
+
+    }
+
     private boolean allPermissionsGranted() {
         for (String permission : Configuration.REQUIRED_PERMISSIONS) {
             if (ContextCompat.checkSelfPermission(this, permission)
@@ -158,44 +236,6 @@ public class CameraActivity extends AppCompatActivity {
             }
         }
         return true;
-    }
-
-    // 取址
-    private File getOutputDirectory() {
-        File mediaDir = new File(getExternalMediaDirs()[0], getString(R.string.app_name));
-        boolean isExist = mediaDir.exists() || mediaDir.mkdir();
-        return isExist ? mediaDir : null;
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        cameraExecutor.shutdown();
-    }
-
-    static class Configuration {
-        public static final String TAG = "CameraxBasic";
-        public static final String FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS";
-        public static final int REQUEST_CODE_PERMISSIONS = 10;
-        public static final String[] REQUIRED_PERMISSIONS = new String[]{Manifest.permission.CAMERA};
-    }
-
-    // 检查权限
-    private void checkPermission() {
-        if (Build.VERSION.SDK_INT >= 23) {//6.0以上才用动态权限
-            boolean cameraPermission = hasPermission(Manifest.permission.CAMERA);
-            boolean recordAudio = hasPermission(Manifest.permission.RECORD_AUDIO);
-            if (cameraPermission && recordAudio) {
-                startCamera();
-            } else {
-                requestPermissions(new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, CAMERA_PERMISSION_REQUEST_CODE);
-            }
-        }
-    }
-
-    // 具体权限判断
-    public boolean hasPermission(String string) {
-        return ContextCompat.checkSelfPermission(CameraActivity.this, string) != PackageManager.PERMISSION_DENIED;
     }
 
     @Override
@@ -208,6 +248,41 @@ public class CameraActivity extends AppCompatActivity {
                 Toast.makeText(this, "用户拒绝授予权限！", Toast.LENGTH_LONG).show();
                 finish();
             }
+        } else if (requestCode == Configuration.REQUEST_AUDIO_CODE_PERMISSIONS) {
+            if (ContextCompat.checkSelfPermission(this,
+                    "Manifest.permission.RECORD_AUDIO") != PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "未授权录制音频权限！", Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        cameraExecutor.shutdown();
+    }
+
+    static class Configuration {
+        public static final String TAG = "CameraxBasic";
+        public static final String FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS";
+        public static final int REQUEST_CODE_PERMISSIONS = 10;
+        public static final int REQUEST_AUDIO_CODE_PERMISSIONS = 12;
+        public static final String[] REQUIRED_PERMISSIONS =
+                Build.VERSION.SDK_INT <= Build.VERSION_CODES.P ?
+                        new String[]{Manifest.permission.CAMERA,
+                                Manifest.permission.RECORD_AUDIO,
+                                Manifest.permission.WRITE_EXTERNAL_STORAGE} :
+                        new String[]{Manifest.permission.CAMERA,
+                                Manifest.permission.RECORD_AUDIO};
+    }
+
+    private static class MyAnalyzer implements ImageAnalysis.Analyzer{
+
+        @SuppressLint("UnsafeOptInUsageError")
+        @Override
+        public void analyze(@NonNull ImageProxy image) {
+            Log.d(Configuration.TAG, "Image's stamp is " + Objects.requireNonNull(image.getImage()).getTimestamp());
+            image.close();
         }
     }
 }
