@@ -1,15 +1,7 @@
 package com.example.applicationmaster;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-import androidx.core.content.FileProvider;
-
 import android.Manifest;
 import android.content.BroadcastReceiver;
-import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -17,21 +9,38 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.ConnectivityManager;
-import android.net.Network;
 import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.provider.MediaStore;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageCapture;
+import androidx.camera.core.ImageCaptureException;
+import androidx.camera.core.Preview;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.view.PreviewView;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
+
+import com.google.common.util.concurrent.ListenableFuture;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Locale;
+import java.util.concurrent.ExecutorService;
 
 // 主体部分
 public class MainActivity extends AppCompatActivity {
@@ -41,13 +50,18 @@ public class MainActivity extends AppCompatActivity {
     private Uri imageUri;
     private IntentFilter intentFilter;
     private NetworkChangeReceive networkChangeReceive;
+
+    private CameraSelector cameraSelectorId = CameraSelector.DEFAULT_BACK_CAMERA;
+    private static final int CAMERA_PERMISSION_REQUEST_CODE = 1;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
         Button takePhoto = (Button) findViewById(R.id.Button1);         // 激活拍照按钮
-        Button trans = (Button) findViewById(R.id.trans);           // 激活转移按钮
+        Button trans = (Button) findViewById(R.id.trans);           // 激活音频转移按钮
+        Button start = (Button) findViewById(R.id.camera_capture_button);       // 激活摄像转移按钮
         picture = (ImageView) findViewById(R.id.imageView);         // 激活图片显示
 
         intentFilter = new IntentFilter();
@@ -78,7 +92,17 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        start.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Intent intent = new Intent(MainActivity.this, CameraActivity.class);
+                startActivity(intent);
+            }
+        });
+
     }
+
+
 
     // 拍照按钮封装
     private void photo(){
@@ -162,4 +186,5 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
+
 }
